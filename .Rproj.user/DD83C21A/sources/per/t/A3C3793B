@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1607254360064.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2215862165",
+    "id" : "A3C3793B",
+    "lastKnownWriteTime" : 1605864193,
+    "last_content_update" : 1605864193,
+    "path" : "~/GitHub/osm_crim/scripts/osm_explore_tube.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "19,89",
+        "scrollLine" : "8"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

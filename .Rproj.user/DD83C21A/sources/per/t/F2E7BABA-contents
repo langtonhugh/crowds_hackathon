@@ -1,0 +1,281 @@
+---
+title: "Data access using APIs"
+author: "Samuel Langton"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+This material has been compiled for a hackathon in [Crowds, Safety and Crime](https://www.eventbrite.co.uk/e/hackathon-exploring-the-relationship-between-crowds-safety-and-crime-tickets-130671059657) hosted by [Methods@Manchester](https://www.methods.manchester.ac.uk/). It is largely based on material by [Reka Solymosi](https://rekadata.net/talks/odm_apis.html) and our associated [book chapter](https://osf.io/a96y7/).
+
+## What is an API?
+
+An Application programming interface (API) is a tool which defines an interface for a program to interact with a software component. This definition is somewhat vague, and deliberately so, because APIs can serve to facilitate countless different things, from social media, to online shopping, to extracting information from databases.
+
+Here, we are interested in how to access data through an API for the purposes of conducting research. Many companies, organisations and governments hold vast quantities of data, and APIs are a useful tool which define what people can access, and how they can do it. Such APIs facilitate scripted and programmatic extraction of content, as permitted by the API provider ([ref 1](https://www.sciencedirect.com/science/article/abs/pii/S0920548916300034?via%3Dihub)).
+
+For the purposes of accessing open data from the web, we are specifically talking about RESTful APIs. The ‘REST’ stands for Representational State Transfer. These APIs work directly over the internet. The computer asking for the data is called the client (us), and the computer sending the data back is known as a server. This dance is called the request-response cycle ([ref 2](https://www.twilio.com/blog/cool-apis)). These web-based APIs are particularly useful because we can mess around with the API online in order to extract specific subsets of data needed to conduct research, teach or just for general interest.
+
+<br>
+
+```{r cartoon, echo = F, out.width = "800px", fig.cap = "Image from [Twilio.](https://www.twilio.com/blog/cool-apis with permission)"}
+knitr::include_graphics("img/api_cartoon.png")
+```
+
+<br>
+
+## Examples
+
+### Twitter
+
+- [Reference page](https://developer.twitter.com/en/docs/api-reference-index)
+- [Favourite projects](https://blog.twitter.com/developer/en_us/topics/community/2019/student-projects-using-the-Twitter-API-developer-blog.html)
+- [Bot detector](https://github.com/mkearney/tweetbotornot)
+- [Missing persons](https://rekadata.net/blog/exploring-public-engagement-with-missing-person-appeals-on-twitter/)
+- [Police tweets during lockdown](https://crimesciencejournal.biomedcentral.com/articles/10.1186/s40163-020-00129-2)
+
+### NASA
+
+- [Reference page](https://api.nasa.gov/)
+- [Mars Rover photos](https://www.twilio.com/blog/2017/04/texting-robots-on-mars-using-python-flask-nasa-apis-and-twilio-mms.html)
+
+### Police data
+
+- [Reference page](https://data.police.uk/)
+- [Stop and search](https://data.police.uk/docs/method/stops-force/)
+- [Online dashboard](https://www.met.police.uk/sd/stats-and-data/met/stop-and-search-dashboard/)
+
+### Geographic information
+- [Reference page](https://www.openstreetmap.org/#map=12/53.4754/-2.2070)
+- ['Live' information](https://www.openstreetmap.org/#map=19/38.34288/-109.66592)
+- [Crime hotspots](https://link.springer.com/chapter/10.1007/978-3-319-89656-4_42)
+
+## Why learn about APIs?
+
+- Sometimes, it is the only way you get the data!
+- Make the most of open data
+- Data refreshes
+- Information can be extracted programmatically in a variety of tools (e.g. R, Python, JavaScript, Ruby etc)
+
+## Three ways of using them
+
+Accessing data through an API is often carried out using 'requests' or 'calls' whereby by clients (that's us!) specify and define the subset of data they need. We will demonstrate how to make such requests using three different methods, namely:
+
+- Direct call through a URL
+- Graphical User Interface wrapper
+- R package wrapper
+
+### Direct call with URL
+
+Here, we use the example of getting data from the Transport for London (TfL) API. Transport data can prove particularly useful when studying the spatial and temporal patterning of crime. You can directly query the TfL API by constructing URLs (i.e. webpage links) which specify the data needed.
+
+- [Read about TfL's Unified API](https://tfl.gov.uk/info-for/open-data-users/unified-api)
+- [Examples of calls](http://content.tfl.gov.uk/example-api-requests.pdf)
+
+Documentation is crucial to understanding how to use APIs. Unfortunately, not all APIs can be used in the same way. A good place to start will be the help files, and in the case of TfL, this includes a document detailing [examples of direct URL calls](http://content.tfl.gov.uk/example-api-requests.pdf) to the API.
+
+Let's say we were interested in obtaining data about station locations on a particular London Underground line. There is heading ('API area') called _Stops_ which provides some examples of how to retrieve information about various stops on the TfL network (e.g. buses, arrival times). For instance, the following URL specifies that we want to access data from the TfL API, that we are interested in lines, that we are specifically interested in the Jubilee line, and that we want stop points (i.e. information about where trains on the line stop).
+
+`https://api.tfl.gov.uk/line/jubilee/stoppoints`
+
+This will take you to a new webpage that looks rather confusing. But, if you squint hard enough, you will see that it does actually contain the information we need. The reason it looks so strange is that the data is in JSON format. This is hard to read visually, but it is easily machine-readable. In R, for example, we could use functions from the `jsonlite` package to parse the data, creating a data frame object `api_call`.
+
+```{r, eval = T, warning = F}
+library(jsonlite)
+
+api_call <- fromJSON(readLines("https://api.tfl.gov.uk/line/jubilee/stoppoints"))
+```
+
+The object `api_call` is now usable, and it is structured as we would expect, using rows and columns. That said, you will notice that some variables are actually lists, rather than 'traditional' classes, such as numeric or character vectors. This demonstrates an important challenge faced by researchers when using open data, because dealing with data in this format can be messy and complicated. It is not always a neatly formatted data frame like a CSV file. However, with some data wrangling it is possible to extract the elements you need and move on to do some cool things. 
+
+```{r, eval = T}
+# load packages
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+# transform api_call object by selecting name and coordinates and projecting to British National Grid
+tfl_jub_sf <- api_call %>% 
+  select(commonName, lat, lon) %>% 
+  st_as_sf(coords = c(x = "lon", y = "lat"), crs = 4326) %>% 
+  st_transform(27700)
+
+# plot the object with ggplot2 + sf
+ggplot(tfl_jub_sf) +
+  geom_sf()
+```
+
+There we have it: with just a bit of knowledge about the TfL direct access URL, and a few lines of code in R, we have queried the API and plotted stations on the Jubilee underground line.
+
+### Graphical User Interface wrapper
+
+Another way of accessing data through APIs is through a _wrapper_. This is called a wrapper because it ‘wraps’ around the API to make it a neater, more usable way to acquire data. In this way, wrappers may remove (or at least lower) many obstacles to accessing open data. In this case we will look first at a wrapper that uses a web interface that provides a graphical user interface (GUI) for accessing the API in question.
+
+A good example of this is Open Street Map, a database of geospatial information built by a community of mappers, enthusiasts and members of the public, who contribute and maintain data about all sorts of environmental features. You can view the information contributed to Open Street Map using their [online mapping platform](https://www.openstreetmap.org/#map=18/38.34290/-109.66570). The result of people’s contributions is a database of spatial information. The GUI API wrapper for Open Street Map is called _Overpass Turbo_.
+
+#### Overpass Turbo
+
+Much like the TfL API, we can query the Open Street Map API without authentication. Similarly, the usage, issues and technical details of the API are described in the [documentation](https://wiki.openstreetmap.org/wiki/API_v0.6). In the case of Open Street Map, it will also be useful to familiarise yourself with how features on the map (i.e. roads, buildings, parks) are defined in the underlying database.
+
+- [Open Street Map features](https://wiki.openstreetmap.org/wiki/Map_features).
+- [Overpass Turbo](https://overpass-turbo.eu/)
+
+Visiting the Overpass Turbo API website will bring up something like this:
+
+```{r turbo1, echo = F, out.width = "800px", fig.cap = "Screenshot from Overpass Turbo."}
+knitr::include_graphics("img/turbo1.png")
+```
+
+<br>
+
+An example query is pre-stated on the left of the page. Note that the key elements are the [key and value](https://wiki.openstreetmap.org/wiki/Map_features) combination and the bounding box ('bbox'). The former specifies what features you want to pull out, in this case, the key _amenity_ and then narrowed down further to _drinking water_. The latter defines the study region itself and can be selected automatically (as in this example) or manually using [coordinates](http://bboxfinder.com/#0.000000,0.000000,0.000000,0.000000).
+
+```
+/*
+This is an example Overpass query.
+Try it out by pressing the Run button above!
+You can find more examples with the Load tool.
+*/
+node
+  [amenity=drinking_water]
+  ({{bbox}});
+out;
+```
+
+What if we wanted to use this syntax to find London Underground stations, like we did using TfL? How might we alter the above query to get what we want?
+
+The first thing will be to pan the map to London, which will automatically update the `bbox` part of the query. Then, you might be tempted to just substitute _drinking_water_ for a generic word like _stations_, as so:
+
+```{r turbo2, echo = F, out.width = "900px", fig.cap = "Trying to pull stations in Greater London using Overpass Turbo."}
+knitr::include_graphics("img/turbo2.png")
+```
+
+<Br>
+
+You will notice that this doesn't find any results. Why might this be? This takes us back to how features in Open Street Map are defined through ‘keys’ and ‘values’. Keys are used to describe a broad category of features (e.g. highway, amenity), and values are more specific descriptions (e.g. cycleway, bar). These are tags which contributors to Open Street Map have defined. A useful way to explore these is by using the comprehensive Open Street Map [Wiki page on map features](https://wiki.openstreetmap.org/wiki/Map_Features). 
+
+Another way would be to use the query Wizard. Using the Wizard means that you can make queries to the Open Street Map database without delving into the syntax above. Click on the ‘Wizard’ option and enter station in the textbox to what we find. Selecting 'build query' will then construct the syntax for you!
+
+```{r turbo3, echo = F, out.width = "900px", fig.cap = "Using the query Wizard in Overpass Turbo."}
+knitr::include_graphics("img/turbo3.png")
+```
+
+<br>
+
+And there we go, on the left-hand side of the page, the Wizard will have constructed the syntax needed to pull stations through the API. Note that the key has changed to 'public transport' - that's what we were doing wrong before. Clicking 'Run' will then pull up the stations as requested.
+
+```{r turbo4, echo = F, out.width = "900px", fig.cap = "Stations in Greater London using the query Wizard in Overpass Turbo."}
+knitr::include_graphics("img/turbo4.png")
+```
+
+<br>
+
+We actually have lots of additional information here, so you might want to delete the bits you don't need. Here, for example, we are only interested in the station locations, so we can delete the _way_ and _relation_ lines of syntax to just leave _nodes_, which defines point locations. In which case, you'd be left with the below syntax to run the query.
+
+```
+/*
+This has been generated by the overpass-turbo wizard.
+The original search was:
+“station”
+*/
+[out:json][timeout:25];
+// gather results
+(
+  // query part for: “station”
+  node["public_transport"="station"]({{bbox}});
+);
+// print results
+out body;
+>;
+out skel qt;
+```
+
+And there we have it: you have successfully used a GUI API wrapper (Overpass Turbo) to query the API for Open Street Map! Once you have run the query and pulled up the information needed, you can export the data using the tab in the top-left of the window. You get given a few different options (e.g. GeoJSON) so select the one you want, and click 'done'.  You can then load the data into whatever software you'd like (e.g. QGIS, R). 
+
+### R package wrapper
+
+Next, we are going to replicate our Overpass Turbo query but this time we will use a different type of API wrapper: an R package called `osmdata`. This is just another way of 'wrapping' around the Open Street Map API. The package allows us to make our queries to the API using code within R. This is particularly beneficial if you are already used to handing and visualising data in R, but even without any experience in R, you might be tempted to use this option to make your research easily reproducible and transparent.
+
+#### Using  the`osmdata` package
+
+With the `osmdata` wrapper, besides checking out the API documentation, you have access to the package documentation and any associated [vignettes online](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.htm). Like the example URLs for the TfL API, and the example syntax for Overpass Turbo, modifying vignettes is a really useful way to get started.
+
+To get data with `osmdata`, we also build up a query, similar to overpass turbo. So the first thing we need to do is specify our bounding box.
+
+We can do this with the `getbb()` function from the `osmdata` package, which stands for “get bounding box”. As we covered earlier, you can think of the bounding box as a box drawn around the area that we are interested in (in this case, London, England) which tells the Open Street Map API that we want everything inside the box, but nothing outside the box. Same as overpass turbo, but here we don’t have a handy search bar.
+
+So, how can we name a bounding box specification to define the study region? This can be obtained manually, like we did with the website [bboxfinder](http://bboxfinder.com/), or we can make use of the ability to use a search term as a parameter of this `getbb()` function. Using the function, we can define the bounding box using something like this.
+
+```{r bb1, eval = F}
+library(osmdata)
+
+bb_sf <- getbb(place_name = "greater london united kingdom", format_out = "sf_polygon")
+```
+
+One downside of using search terms to define the bounding box, as with any search term, is that inconsistencies in terminology, wordings and spelling might lead to unexpected outputs (or none at all). Another way to obtain the bounding box is to manually specify the latitude and longitude coordinates. For Greater London, we can specify our bounding box as follows, saving the coordinates to the object `bb_gl` for later use.
+
+```{r packload, echo = F, warning = F, message = F}
+library(osmdata)
+```
+
+```{r bb2}
+bb_gl <- c(-0.51037, 51.28676, 0.33401, 51.69187) # xmin, ymin, xmax, ymax
+```
+
+We can now move on to query data from the Open Street Map API using the `opq()` function. The function name is short for 'Overpass query'. Besides specifying what area we want to query with our bounding box object(s) in the `opq()` function, we must also define the feature which we want to pull from the API. This is pretty much exactly like what we did using Overpass Turbo using key-value combinations.
+
+We can select what features we want using the `add_osm_feature()` function, specifying our key as 'public transport' and our value as 'station'.
+
+```{r opq}
+osm_stat_sf <- opq(bbox = bb_gl) %>%                               # bounding box
+  add_osm_feature(key = 'public_transport', value = 'station') %>% # select features
+  osmdata_sf()                                                     # specify class
+```
+
+The resulting object `osm_stat_sf` contains lots of information. We can view the contents of the object by simply executing the object name into the R Console.
+
+```{r printstations}
+osm_stat_sf
+```
+
+This confirms details like the bounding box coordinates, but also provides information on the features collected from the query. As one might expect, most information relating to public transport station locations has been recorded using points (i.e. two-dimensional vertices, coordinates) of which we have `r nrow(osm_stat_sf$osm_points)` at the time of writing. We also have around fifty polygons. For now, let's extract the point information. This what were termed 'nodes' in the Overpass Turbo query.
+
+```{r stationpoints}
+osm_stat_sf <- osm_stat_sf$osm_points 
+```
+
+We now have an `sf` object with all the public transport stations in our study region mapped by Open Street Map volunteers, along with  ~130 variables of auxiliary data, such as the `fare_zone` the station is in, what `amenity` it may have and whether it has `toilets`, amongst many others.
+
+After a bit of exploring the data in R, we can pinpoint the variables needed to select the Jubilee London Underground line, which we want to compare with what we pulled from TfL earlier.
+
+```{r filterline}
+library(dplyr)
+
+osm_jub_sf <- osm_stat_sf %>% 
+  filter(grepl("Jubilee", line))
+```
+
+This gives us Open Street Map data on all 27 stations on the Jubilee underground line. Now we have all our open datasets loaded into the R environment! We can then plot them as we did previously.
+
+```{r osmmap}
+ggplot(osm_jub_sf) +
+  geom_sf(size = 2)
+```
+
+Looks pretty similar to TfL, right? Well, let's check.
+
+```{r comparemap}
+ggplot() +
+  geom_sf(data = tfl_jub_sf, size = 2) +
+  geom_sf(data = osm_jub_sf, size = 2, col = "red") 
+```
+
+Okay, there are differences! Although they are broadly the same, we've queried two different sources for the same information about the Jubilee line and come up with slightly different data. Why might this be? What might the implications of this be? What can we do about it?
+
+## Closing
+
+Thanks very much for following along! If you want to read more about using APIs for accessing open data, please do have a read of our [forthcoming book chapter](https://osf.io/a96y7/) which includes a background to open data, and a hands-on example in R using crime data.
